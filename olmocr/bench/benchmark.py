@@ -190,7 +190,7 @@ def main():
     # New arguments
     parser.add_argument("--sample", type=int, default=None, help="Randomly sample N tests to run instead of all tests.")
     parser.add_argument("--test_report", type=str, default=None, help="Generate an HTML report of test results. Provide a filename (e.g., results.html).")
-    parser.add_argument("--json_summary", type=str, default=None, help="Generate a JSON summary of test results. Provide a filename (e.g., summary.json).")
+    parser.add_argument("--json_summary", action="store_true", help="Output a JSON summary of results for each candidate in its folder as summary.json")
     parser.add_argument(
         "--output_failed", type=str, default=None, help="Output a JSONL file containing tests that failed across all candidates. Provide a filename."
     )
@@ -462,7 +462,6 @@ def main():
             print("\nNo tests failed across all candidates. No output file created.")
 
     if args.json_summary:
-        summary_entries = []
         for candidate_name, overall_score, total_tests, candidate_errors, test_failures, test_type_breakdown, ci, all_test_scores in summary:
             type_stats = {}
             for ttype, scores in test_type_breakdown.items():
@@ -499,8 +498,7 @@ def main():
                 for jsonl_file, results in jsonl_results.items()
             }
 
-            summary_entries.append(
-                {
+            summary = {
                     "candidate": candidate_name,
                     "overall_score": overall_score,
                     "total_tests": total_tests,
@@ -508,40 +506,34 @@ def main():
                     "confidence_interval": {"low": ci[0], "high": ci[1]},
                     "jsonl_breakdown": jsonl_stats,
                 }
-            )
 
-        payload = {
-            "input_folder": input_folder,
-            "jsonl_files": jsonl_files,
-            "params": {
-                "force": args.force,
-                "skip_baseline": args.skip_baseline,
-                "bootstrap_samples": n_bootstrap,
-                "confidence_level": ci_level,
-                "sample": args.sample,
-            },
-            "summary": summary_entries,
+            payload = {
+                "input_folder": input_folder,
+                "jsonl_files": jsonl_files,
+                "params": {
+                    "force": args.force,
+                    "skip_baseline": args.skip_baseline,
+                    "bootstrap_samples": n_bootstrap,
+                    "confidence_level": ci_level,
+                    "sample": args.sample,
+                },
+                "summary": summary,
         }
 
-        base_path = Path(args.json_summary)
-        if not base_path.is_absolute():
-            base_path = Path(input_folder) / base_path
-        output_path = base_path
-        if output_path.parent:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path = Path(input_folder) / candidate_name / "summary.json"
 
-        if output_path.exists():
-            print(
-                f"Warning: JSON summary already exists at {output_path} and will be overwritten."
-            )
+            if output_path.exists():
+                print(
+                    f"Warning: JSON summary already exists at {output_path} and will be overwritten."
+                )
 
 
-        try:
-            with output_path.open("w", encoding="utf-8") as summary_file:
-                json.dump(payload, summary_file, indent=2)
-            print(f"\nJSON summary written to {output_path}")
-        except Exception as e:
-            print(f"Error writing JSON summary to {output_path}: {e}", file=sys.stderr)
+            try:
+                with output_path.open("w", encoding="utf-8") as summary_file:
+                    json.dump(payload, summary_file, indent=2)
+                print(f"\nJSON summary for candidate {candidate_name} written to {output_path}")
+            except Exception as e:
+                print(f"Error writing JSON summary to {output_path}: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
